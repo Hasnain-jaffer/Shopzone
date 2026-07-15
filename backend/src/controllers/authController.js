@@ -64,3 +64,48 @@ export const loginUser = async (req, res) => {
     res.status(500).json({ error: "Error logging in", message: error.message });
   }
 };
+
+// ---- Admin-only user management ----
+
+export const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find({}).select("-password");
+    return res.status(200).json(users);
+  } catch (error) {
+    return res.status(500).json({ error: "Error fetching users", message: error.message });
+  }
+};
+
+export const updateUserRole = async (req, res) => {
+  try {
+    const { role } = req.body;
+    if (!["user", "admin"].includes(role)) {
+      return res.status(400).json({ message: "Role must be 'user' or 'admin'" });
+    }
+    if (req.params.id === req.user._id) {
+      return res.status(400).json({ message: "You cannot change your own role" });
+    }
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.id,
+      { role },
+      { new: true }
+    ).select("-password");
+    if (!updatedUser) return res.status(404).json({ message: "User not found" });
+    return res.status(200).json(updatedUser);
+  } catch (error) {
+    return res.status(500).json({ error: "Error updating user", message: error.message });
+  }
+};
+
+export const deleteUser = async (req, res) => {
+  try {
+    if (req.params.id === req.user._id) {
+      return res.status(400).json({ message: "You cannot delete your own account" });
+    }
+    const deletedUser = await User.findByIdAndDelete(req.params.id);
+    if (!deletedUser) return res.status(404).json({ message: "User not found" });
+    return res.status(200).json({ message: "User deleted" });
+  } catch (error) {
+    return res.status(500).json({ error: "Error deleting user", message: error.message });
+  }
+};

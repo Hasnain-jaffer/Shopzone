@@ -9,12 +9,15 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import AdminPage from "./pages/AdminPage";
 import AdminRoute from "./components/AdminRoute";
+import Footer from "./components/Footer";
+
 
 //  Pages WITH navbar
 const WithNavbar = ({ children }) => (
   <>
     <Navbar />
     {children}
+    <Footer />   {/* ← footer appears on all pages that have navbar */}
   </>
 );
 

@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import {
     PiPackage, PiPlus, PiTrash, PiCheck, PiX,
-    PiSignOut, PiList, PiPencil
+    PiSignOut, PiList, PiPencil, PiSquaresFour,
+    PiUsers, PiShieldCheck, PiWarning
 } from "react-icons/pi";
 import { useNavigate } from "react-router-dom";
 
@@ -13,12 +14,15 @@ const AdminPage = () => {
     const navigate = useNavigate();
     const user = JSON.parse(localStorage.getItem("user") || "{}");
 
-    const [activeTab, setActiveTab] = useState("products");
+    const [activeTab, setActiveTab] = useState("dashboard");
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [editingId, setEditingId] = useState(null);
     const [editData, setEditData] = useState({});
     const [sidebarOpen, setSidebarOpen] = useState(true);
+
+    const [users, setUsers] = useState([]);
+    const [usersLoading, setUsersLoading] = useState(true);
 
     const [form, setForm] = useState({
         name: "", price: "", image: "",
@@ -39,7 +43,61 @@ const AdminPage = () => {
         }
     };
 
-    useEffect(() => { fetchProducts(); }, []);
+    // Fetch all users (admin only)
+    const fetchUsers = async () => {
+        setUsersLoading(true);
+        try {
+            const res = await fetch(`${API}/auth/users`, {
+                headers: { "Authorization": `Bearer ${getToken()}` }
+            });
+            if (!res.ok) throw new Error("Failed to fetch users");
+            const data = await res.json();
+            setUsers(data);
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setUsersLoading(false);
+        }
+    };
+
+    const handleRoleChange = async (id, role) => {
+        try {
+            const res = await fetch(`${API}/auth/users/${id}/role`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${getToken()}`
+                },
+                body: JSON.stringify({ role })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || "Failed to update role");
+            fetchUsers();
+        } catch (err) {
+            alert(err.message);
+        }
+    };
+
+    const handleDeleteUser = async (id) => {
+        if (!window.confirm("Delete this user permanently?")) return;
+        try {
+            const res = await fetch(`${API}/auth/users/${id}`, {
+                method: "DELETE",
+                headers: { "Authorization": `Bearer ${getToken()}` }
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || "Failed to delete user");
+            fetchUsers();
+        } catch (err) {
+            alert(err.message);
+        }
+    };
+
+    useEffect(() => { fetchProducts(); fetchUsers(); }, []);
+
+    const lowStockCount = products.filter(p => p.stock > 0 && p.stock <= 10).length;
+    const outOfStockCount = products.filter(p => p.stock === 0).length;
+    const adminCount = users.filter(u => u.role === "admin").length;
 
     // Handle add product form change
     const handleFormChange = (e) => {
@@ -147,8 +205,10 @@ const AdminPage = () => {
                 {/* Nav items */}
                 <div className="flex flex-col gap-1 p-3 flex-1">
                     {[
+                        { id: "dashboard", icon: <PiSquaresFour size={20} />, label: "Dashboard" },
                         { id: "products", icon: <PiPackage size={20} />, label: "Products" },
                         { id: "add", icon: <PiPlus size={20} />, label: "Add Product" },
+                        { id: "users", icon: <PiUsers size={20} />, label: "Users" },
                     ].map(item => (
                         <button key={item.id} onClick={() => setActiveTab(item.id)}
                             className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-semibold
@@ -165,7 +225,7 @@ const AdminPage = () => {
                 <div className="p-3 border-t border-white border-opacity-10">
                     {sidebarOpen && (
                         <div className="px-3 py-2 mb-2">
-                            <p className="text-white text-xs font-bold truncate">{user.name}</p>
+                            <p className="text-white text-xs font-bold truncate">{user.firstName} {user.lastName}</p>
                             <p className="text-indigo-400 text-xs truncate">{user.email}</p>
                         </div>
                     )}
@@ -184,11 +244,15 @@ const AdminPage = () => {
                 <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 flex-shrink-0">
                     <div>
                         <h1 className="text-lg font-black text-gray-900">
-                            {activeTab === "products" ? "All Products" : "Add New Product"}
+                            {activeTab === "dashboard" ? "Dashboard"
+                                : activeTab === "products" ? "All Products"
+                                : activeTab === "users" ? "User Management"
+                                : "Add New Product"}
                         </h1>
                         <p className="text-xs text-gray-400">
-                            {activeTab === "products"
-                                ? `${products.length} products total`
+                            {activeTab === "dashboard" ? "Store overview at a glance"
+                                : activeTab === "products" ? `${products.length} products total`
+                                : activeTab === "users" ? `${users.length} registered users`
                                 : "Fill in the details below"}
                         </p>
                     </div>
@@ -202,6 +266,50 @@ const AdminPage = () => {
 
                 {/* Content area */}
                 <div className="flex-1 overflow-y-auto p-6">
+
+                    {/* ── DASHBOARD ── */}
+                    {activeTab === "dashboard" && (
+                        <div className="flex flex-col gap-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                {[
+                                    { label: "Total Products", value: products.length, icon: <PiPackage size={22} />, color: "#667eea" },
+                                    { label: "Total Users", value: users.length, icon: <PiUsers size={22} />, color: "#764ba2" },
+                                    { label: "Admins", value: adminCount, icon: <PiShieldCheck size={22} />, color: "#22c55e" },
+                                    { label: "Low / Out of Stock", value: lowStockCount + outOfStockCount, icon: <PiWarning size={22} />, color: "#f59e0b" },
+                                ].map(stat => (
+                                    <div key={stat.label} className="bg-white rounded-2xl border border-gray-200 p-5 flex items-center gap-4">
+                                        <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white flex-shrink-0"
+                                            style={{ background: stat.color }}>
+                                            {stat.icon}
+                                        </div>
+                                        <div>
+                                            <p className="text-2xl font-black text-gray-900">{stat.value}</p>
+                                            <p className="text-xs text-gray-400 font-semibold">{stat.label}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="bg-white rounded-2xl border border-gray-200 p-6">
+                                <h2 className="text-base font-black text-gray-800 mb-4">Recently Added Products</h2>
+                                <div className="flex flex-col gap-3">
+                                    {products.slice(-5).reverse().map(p => (
+                                        <div key={p._id} className="flex items-center gap-3 border-b border-gray-50 pb-3 last:border-0 last:pb-0">
+                                            <img src={p.image} alt={p.name} className="w-10 h-10 object-contain rounded-lg bg-gray-100 p-1" />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold text-gray-800 truncate">{p.name}</p>
+                                                <p className="text-xs text-gray-400">{p.category}</p>
+                                            </div>
+                                            <span className="font-bold text-indigo-600 text-sm">${p.price}</span>
+                                        </div>
+                                    ))}
+                                    {products.length === 0 && (
+                                        <p className="text-sm text-gray-400">No products yet.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* ── ADD PRODUCT FORM ── */}
                     {activeTab === "add" && (
@@ -364,6 +472,64 @@ const AdminPage = () => {
                                                                 </button>
                                                             </div>
                                                         )}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── USERS TABLE ── */}
+                    {activeTab === "users" && (
+                        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                            {usersLoading ? (
+                                <div className="p-12 text-center text-gray-400">Loading users...</div>
+                            ) : users.length === 0 ? (
+                                <div className="p-12 text-center text-gray-400">No users found</div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="border-b border-gray-100 bg-gray-50">
+                                                <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide">Name</th>
+                                                <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide">Email</th>
+                                                <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide">Role</th>
+                                                <th className="text-left px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {users.map((u) => (
+                                                <tr key={u._id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                                                    <td className="px-4 py-3 font-semibold text-gray-800">{u.firstName} {u.lastName}</td>
+                                                    <td className="px-4 py-3 text-gray-500">{u.email}</td>
+                                                    <td className="px-4 py-3">
+                                                        <span className={`text-xs font-bold px-2 py-1 rounded-full
+                                                            ${u.role === "admin" ? "bg-indigo-50 text-indigo-600" : "bg-gray-100 text-gray-500"}`}>
+                                                            {u.role}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-center gap-2">
+                                                            {u._id === user._id ? (
+                                                                <span className="text-xs text-gray-400 italic">This is you</span>
+                                                            ) : (
+                                                                <>
+                                                                    <button
+                                                                        onClick={() => handleRoleChange(u._id, u.role === "admin" ? "user" : "admin")}
+                                                                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors">
+                                                                        {u.role === "admin" ? "Revoke Admin" : "Make Admin"}
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleDeleteUser(u._id)}
+                                                                        className="w-8 h-8 rounded-lg bg-red-50 text-red-400 flex items-center justify-center hover:bg-red-100 transition-colors">
+                                                                        <PiTrash size={15} />
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
