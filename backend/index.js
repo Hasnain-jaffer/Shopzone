@@ -1,5 +1,5 @@
 import dns from 'dns'; // Set DNS servers to Google's public DNS servers
-dns.setServers(['8.8.8.8', '8.8.4.4']);
+dns.setServers(['8.8.8.8', '8.8.4.4'])
 
 import express from 'express';
 import cors from 'cors';
